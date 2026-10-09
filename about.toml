@@ -1,0 +1,25 @@
+# cargo-about configuration: lists the third-party crates compiled into pdfjiff
+# and reproduces their license texts, which their licenses require for binary
+# distribution. The release workflow runs:
+#   cargo about generate --locked --fail -o THIRD-PARTY-LICENSES.md about.hbs
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "Unicode-3.0",
+    "Zlib",
+    "0BSD",
+    "Unlicense",
+]
+targets = [
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true

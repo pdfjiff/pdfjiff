@@ -1,0 +1,76 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. **Never attach confidential or personal PDFs.** If a bug needs a specific file, try to reproduce it with a small synthetic PDF.
+        Security problems go through [private reporting](../security/advisories/new), not here.
+  - type: input
+    id: version
+    attributes:
+      label: pdfjiff version
+      description: Output of `pdfjiff --version`
+      placeholder: pdfjiff 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - install.sh / install.ps1
+        - Homebrew
+        - Scoop
+        - cargo install / cargo binstall
+        - Docker
+        - GitHub Action
+        - Downloaded a release archive
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and CPU
+      placeholder: macOS 15.4 (Apple silicon) / Ubuntu 24.04 x86-64 / Windows 11 ARM64
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact command, with `--json` added if possible.
+      render: shell
+      placeholder: pdfjiff compress report.pdf --target 2MB --json
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Paste the full output, including the `error.code` and `hint` if there are any.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: About the input PDF
+      description: Anything notable, for example which application produced it, whether it is scanned or has forms or signatures, and the output of `pdfjiff inspect FILE --json`.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and didn't find this one.
+          required: true
+        - label: I did not attach any confidential or personal documents.
+          required: true

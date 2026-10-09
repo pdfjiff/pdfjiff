@@ -1,0 +1,21 @@
+# Build output
+/target/
+/dist/
+__pycache__/
+# Generated at release time by cargo-about
+/THIRD-PARTY-LICENSES.md
+
+# Editors and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Never commit local environment files or credentials
+.env
+.env.*
+*.pem
+*.key
+
+# Sample outputs produced while trying the CLI
+*-compressed.pdf

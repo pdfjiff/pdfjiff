@@ -1,0 +1,68 @@
+name: Setup PDFJiff
+description: Install the pdfjiff CLI to compress, merge and inspect PDFs in your workflow. Fast, local, no uploads.
+author: PDFJiff contributors
+branding:
+  icon: file-text
+  color: blue
+
+inputs:
+  version:
+    description: Release to install, e.g. "0.1.0". Defaults to the latest release.
+    required: false
+    default: latest
+
+outputs:
+  version:
+    description: The installed version, as printed by `pdfjiff --version`.
+    value: ${{ steps.verify.outputs.version }}
+  path:
+    description: Directory containing the pdfjiff executable (already added to PATH).
+    value: ${{ steps.dir.outputs.dir }}
+
+runs:
+  using: composite
+  steps:
+    - id: dir
+      shell: bash
+      run: |
+        # Reject anything but a version number: the value ends up in PATH and in step outputs.
+        if ! printf '%s' "$INPUT_VERSION" | grep -Eqx 'latest|v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?'; then
+          echo "::error::version must be 'latest' or a release number such as 0.1.0"
+          exit 1
+        fi
+        base="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}"
+        # Forward slashes work in bash and PowerShell alike on Windows runners.
+        if [ "$RUNNER_OS" = "Windows" ]; then base="$(cygpath -m "$base")"; fi
+        echo "dir=$base/pdfjiff/$INPUT_VERSION/bin" >> "$GITHUB_OUTPUT"
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+
+    - name: Install (macOS / Linux)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        PDFJIFF_VERSION: ${{ inputs.version }}
+        PDFJIFF_INSTALL_DIR: ${{ steps.dir.outputs.dir }}
+        PDFJIFF_REPO: ${{ github.action_repository || github.repository }}
+      run: sh "$GITHUB_ACTION_PATH/install.sh"
+
+    - name: Install (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        PDFJIFF_VERSION: ${{ inputs.version }}
+        PDFJIFF_INSTALL_DIR: ${{ steps.dir.outputs.dir }}
+        PDFJIFF_REPO: ${{ github.action_repository || github.repository }}
+        PDFJIFF_NO_MODIFY_PATH: "1"
+      run: Get-Content -Raw (Join-Path $env:GITHUB_ACTION_PATH 'install.ps1') | Invoke-Expression
+
+    - id: verify
+      shell: bash
+      # DIR is built from the runner's tool cache and the validated version input.
+      env:
+        DIR: ${{ steps.dir.outputs.dir }}
+      run: | # zizmor: ignore[github-env]
+        echo "$DIR" >> "$GITHUB_PATH"
+        version="$("$DIR/pdfjiff" --version)"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "Installed $version"

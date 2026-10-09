@@ -1,0 +1,161 @@
+# Keeps every install path honest.
+#  - local:     on PRs touching installers, build pdfjiff, serve a fake release from
+#               localhost, and run install.sh / install.ps1 / action.yml against it.
+#  - published: at the end of each release (called by release.yml) and weekly,
+#               install the real latest release through each public channel.
+name: Installers
+
+on:
+  pull_request:
+    paths:
+      - install.sh
+      - install.ps1
+      - action.yml
+      - Dockerfile
+      - .github/scripts/**
+      - .github/workflows/installers.yml
+  workflow_call:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  local:
+    name: Local release (${{ matrix.os }})
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build and package a local release
+        shell: bash
+        run: |
+          cargo build --release --locked -p pdfjiff-cli --target "${{ matrix.target }}"
+          bin="target/${{ matrix.target }}/release/pdfjiff"
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          py="$(command -v python3 || command -v python)"
+          "$py" .github/scripts/release_tools.py package "${{ matrix.target }}" "$bin" dist
+          "$py" .github/scripts/release_tools.py checksums dist
+          cd dist && ("$py" -m http.server 8765 > ../server.log 2>&1 &) && sleep 2
+      - name: install.sh
+        if: runner.os != 'Windows'
+        env:
+          PDFJIFF_DOWNLOAD_BASE: http://127.0.0.1:8765
+        run: |
+          sh install.sh --to "$RUNNER_TEMP/bin"
+          "$RUNNER_TEMP/bin/pdfjiff" --version
+          sh install.sh --to "$RUNNER_TEMP/bin" --uninstall
+          test ! -e "$RUNNER_TEMP/bin/pdfjiff"
+      - name: install.sh rejects a tampered download
+        if: runner.os != 'Windows'
+        env:
+          PDFJIFF_DOWNLOAD_BASE: http://127.0.0.1:8765
+        run: |
+          cp dist/SHA256SUMS dist/SHA256SUMS.orig
+          sed -E 's/^[0-9a-f]{64}/0000000000000000000000000000000000000000000000000000000000000000/' dist/SHA256SUMS.orig > dist/SHA256SUMS
+          if sh install.sh --to "$RUNNER_TEMP/tampered"; then echo "tampered archive was accepted"; exit 1; fi
+          test ! -e "$RUNNER_TEMP/tampered/pdfjiff"
+          mv dist/SHA256SUMS.orig dist/SHA256SUMS
+      - name: install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PDFJIFF_DOWNLOAD_BASE: http://127.0.0.1:8765
+          PDFJIFF_NO_MODIFY_PATH: "1"
+        run: |
+          $env:PDFJIFF_INSTALL_DIR = Join-Path $env:RUNNER_TEMP 'bin'
+          Get-Content -Raw ./install.ps1 | Invoke-Expression
+          & (Join-Path $env:PDFJIFF_INSTALL_DIR 'pdfjiff.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'installed binary failed' }
+      - name: install.ps1 under Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          PDFJIFF_DOWNLOAD_BASE: http://127.0.0.1:8765
+          PDFJIFF_NO_MODIFY_PATH: "1"
+        run: |
+          $env:PDFJIFF_INSTALL_DIR = Join-Path $env:RUNNER_TEMP 'bin51'
+          Get-Content -Raw ./install.ps1 | Invoke-Expression
+          & (Join-Path $env:PDFJIFF_INSTALL_DIR 'pdfjiff.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'installed binary failed' }
+      - name: PSScriptAnalyzer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) { Install-Module PSScriptAnalyzer -Force -Scope CurrentUser }
+          $issues = Invoke-ScriptAnalyzer -Path ./install.ps1 -Severity Warning,Error -ExcludeRule PSAvoidUsingWriteHost
+          $issues | Format-Table -AutoSize
+          if ($issues) { throw "PSScriptAnalyzer found $($issues.Count) issue(s)" }
+      - name: GitHub Action (uses ./)
+        uses: ./
+        env:
+          PDFJIFF_DOWNLOAD_BASE: http://127.0.0.1:8765
+      - name: Action put pdfjiff on PATH
+        shell: bash
+        run: pdfjiff --version
+
+  published:
+    name: Published release (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    steps:
+      - name: One-line installer (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh" | sh -s -- --to "$RUNNER_TEMP/bin"
+          "$RUNNER_TEMP/bin/pdfjiff" capabilities --json
+      - name: One-line installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PDFJIFF_NO_MODIFY_PATH: "1"
+        run: |
+          irm "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/install.ps1" | iex
+          & "$env:LOCALAPPDATA\Programs\pdfjiff\bin\pdfjiff.exe" capabilities --json
+          if ($LASTEXITCODE -ne 0) { throw 'installed binary failed' }
+      - name: Docker image
+        if: runner.os == 'Linux'
+        run: docker run --rm "ghcr.io/${GITHUB_REPOSITORY,,}:latest" --version
+      - name: Homebrew tap
+        if: runner.os == 'macOS' && vars.HOMEBREW_TAP != ''
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          TAP: ${{ vars.HOMEBREW_TAP }}
+        run: |
+          brew install "${TAP%/homebrew-*}/${TAP#*/homebrew-}/pdfjiff"
+          brew test pdfjiff
+          pdfjiff completions zsh > /dev/null
+
+  published-action:
+    name: Published GitHub Action
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./
+      - run: pdfjiff capabilities --json

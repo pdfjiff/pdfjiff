@@ -1,0 +1,5 @@
+*
+!dist/docker/
+!LICENSE-MIT
+!LICENSE-APACHE
+!THIRD-PARTY-LICENSES.md
