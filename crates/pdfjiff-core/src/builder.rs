@@ -369,10 +369,10 @@ fn prepare_decoded(
         let mut rgb = Vec::with_capacity(n * 3);
         let mut alpha = Vec::with_capacity(n);
         let mut fully_opaque = true;
-        for px in raw.chunks_exact(4) {
-            rgb.extend_from_slice(&px[..3]);
-            alpha.push(px[3]);
-            if px[3] != 255 {
+        for &[red, green, blue, opacity] in raw.as_chunks::<4>().0 {
+            rgb.extend_from_slice(&[red, green, blue]);
+            alpha.push(opacity);
+            if opacity != 255 {
                 fully_opaque = false;
             }
         }
