@@ -16,5 +16,5 @@ categories = ["compression", "multimedia::images", "parser-implementations"]
 image = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"] }
 miniz_oxide = "0.9"
 pdf-writer = "0.15"
-lopdf = { version = "0.44", default-features = false }
+lopdf = { version = "0.45", default-features = false }
 serde = { version = "1", features = ["derive"] }
