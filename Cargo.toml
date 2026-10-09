@@ -1,0 +1,26 @@
+[workspace]
+members = ["crates/pdfjiff-core", "crates/pdfjiff-cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/pdfjiff/pdfjiff"
+homepage = "https://github.com/pdfjiff/pdfjiff"
+
+[workspace.dependencies]
+# Keep this version equal to workspace.package.version when releasing.
+pdfjiff-core = { path = "crates/pdfjiff-core", version = "0.1.0" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# Optimize dependencies (image codecs, zlib) in test/dev builds. Our own code
+# stays debuggable; the compression regression tests run far faster.
+[profile.dev.package."*"]
+opt-level = 2

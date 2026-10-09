@@ -1,0 +1,20 @@
+[package]
+name = "pdfjiff-core"
+description = "Native PDF inspection, page assembly and image recompression primitives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/pdfjiff-core"
+readme = "README.md"
+keywords = ["pdf", "compression", "merge", "document", "optimize"]
+categories = ["compression", "multimedia::images", "parser-implementations"]
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"] }
+miniz_oxide = "0.9"
+pdf-writer = "0.15"
+lopdf = { version = "0.44", default-features = false }
+serde = { version = "1", features = ["derive"] }
