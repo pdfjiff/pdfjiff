@@ -5,12 +5,12 @@ mod files;
 use args::{Cli, Command};
 use clap::{CommandFactory, Parser};
 use error::{Failure, Result};
-use files::{default_output, read_input, Destination};
+use files::{default_output, image_pdf_output, read_input, Destination};
 use pdfjiff_core::{
     compress::{try_compress, CompressOptions},
     inspect,
     pages::PdfMerger,
-    Inspection,
+    Inspection, Orientation, PageSize, PdfBuilder,
 };
 use serde_json::{json, Value};
 use std::{
@@ -91,6 +91,7 @@ fn execute(cli: &Cli, cancel: &AtomicBool) -> Result<Value> {
                     {"id":"document.inspect","ready":true,"limitations":["structure only; no render or signature validation"]},
                     {"id":"pdf.compress","ready":true,"features":["presets","lossless structure optimization","bounded target search"],"limitations":["no raster fallback","encrypted inputs require prior decryption"]},
                     {"id":"pdf.merge","ready":true,"limitations":["document-level structures may require --allow-structure-loss","metadata is not combined"]}
+                    ,{"id":"image.to_pdf","ready":true,"features":["JPG/JPEG/JFIF","PNG","WebP","ordered multi-image PDF","fit/A4/Letter pages"],"limitations":["one image per page"]}
                 ],
                 "not_implemented":["rendering","OCR","server","dashboard","pipeline","batch","stdin/stdout artifacts","password input"],
                 "cancellation":"between native processing stages; no hard deadline within a decode",
@@ -263,6 +264,95 @@ fn execute(cli: &Cli, cancel: &AtomicBool) -> Result<Value> {
                 warnings,
             ))
         }
+        Command::ImageToPdf(options) => {
+            let output = options
+                .output
+                .clone()
+                .unwrap_or_else(|| image_pdf_output(&options.inputs[0]));
+            let dest =
+                Destination::prepare(&output, &options.inputs, options.overwrite, options.dry_run)?;
+            let page_size = match options.page_size {
+                args::ImagePageSize::Fit => PageSize::FitToImage,
+                args::ImagePageSize::A4 => PageSize::A4,
+                args::ImagePageSize::Letter => PageSize::Letter,
+            };
+            let orientation = match options.orientation {
+                args::ImageOrientation::Auto => Orientation::Auto,
+                args::ImageOrientation::Portrait => Orientation::Portrait,
+                args::ImageOrientation::Landscape => Orientation::Landscape,
+            };
+            let mut builder = PdfBuilder::try_new(
+                page_size,
+                orientation,
+                options.margin_mm,
+                options.dpi as f32,
+                options.quality,
+            )
+            .map_err(Failure::processing)?;
+            let total_limit = cli.max_total_input_mib * 1024 * 1024;
+            let mut input_bytes = 0_u64;
+            for input in &options.inputs {
+                check_cancel(cancel)?;
+                let remaining = total_limit.saturating_sub(input_bytes);
+                if remaining == 0 {
+                    return Err(Failure::new(
+                        "INPUT_LIMIT",
+                        "Selected images exceed the total input limit.",
+                        "Increase --max-total-input-mib only when enough memory is available.",
+                        6,
+                    ));
+                }
+                let data = read_input(input, limit.min(remaining))?;
+                input_bytes += data.len() as u64;
+                builder.try_add_image(&data).map_err(|error| {
+                    Failure::new(
+                        "INVALID_IMAGE",
+                        format!("{}: {error}", input.display()),
+                        "Choose JPG, JPEG, JFIF, PNG or WebP images.",
+                        3,
+                    )
+                })?;
+            }
+            check_cancel(cancel)?;
+            let bytes = builder.try_finish().map_err(Failure::processing)?;
+            let info = inspect(&bytes).map_err(|error| {
+                Failure::processing(format!("Output validation failed: {error}"))
+            })?;
+            let page_count = info.page_count.unwrap_or(0);
+            if page_count != options.inputs.len() as u32 {
+                return Err(Failure::processing(
+                    "Output page count did not match the selected images.",
+                ));
+            }
+            let stats = json!({
+                "input_bytes": input_bytes,
+                "output_bytes": bytes.len(),
+                "images": options.inputs.len(),
+                "pages": page_count,
+                "page_size": match options.page_size { args::ImagePageSize::Fit => "fit", args::ImagePageSize::A4 => "a4", args::ImagePageSize::Letter => "letter" },
+                "dpi": options.dpi,
+                "recompress_quality": options.quality,
+            });
+            if options.dry_run {
+                return Ok(envelope(
+                    "image.to_pdf",
+                    "planned",
+                    json!({"output":dest.path(),"input_order":options.inputs}),
+                    stats,
+                    vec![],
+                    vec![],
+                ));
+            }
+            let path = dest.publish(&bytes)?;
+            Ok(envelope(
+                "image.to_pdf",
+                "succeeded",
+                json!({"input_order":options.inputs}),
+                stats,
+                vec![path],
+                vec![],
+            ))
+        }
     }
 }
 fn operation(cli: &Cli) -> &'static str {
@@ -270,6 +360,7 @@ fn operation(cli: &Cli) -> &'static str {
         Some(Command::Inspect { .. }) => "document.inspect",
         Some(Command::Compress(_)) => "pdf.compress",
         Some(Command::Merge(_)) => "pdf.merge",
+        Some(Command::ImageToPdf(_)) => "image.to_pdf",
         _ => "capabilities",
     }
 }

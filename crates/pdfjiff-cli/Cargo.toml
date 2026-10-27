@@ -27,6 +27,7 @@ ctrlc = "3"
 
 [dev-dependencies]
 lopdf = { version = "0.44", default-features = false }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 # `cargo binstall pdfjiff-cli` downloads the prebuilt release archive.
 [package.metadata.binstall]

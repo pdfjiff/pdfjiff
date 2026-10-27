@@ -646,6 +646,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "ctrlc",
+ "image",
  "lopdf",
  "pdfjiff-core",
  "same-file",

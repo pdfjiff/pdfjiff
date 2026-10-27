@@ -65,6 +65,12 @@ pub fn default_output(input: &Path) -> PathBuf {
     input.with_file_name(name)
 }
 
+pub fn image_pdf_output(input: &Path) -> PathBuf {
+    let mut name = input.file_stem().unwrap_or_default().to_os_string();
+    name.push(".pdf");
+    input.with_file_name(name)
+}
+
 pub struct Destination {
     path: PathBuf,
     inputs: Vec<PathBuf>,

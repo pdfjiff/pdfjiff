@@ -7,6 +7,31 @@ use std::{
 };
 use tempfile::TempDir;
 
+fn jfif(path: &Path, width: u32, height: u32) {
+    use image::{codecs::jpeg::JpegEncoder, ImageEncoder, RgbImage};
+
+    let pixels = RgbImage::from_fn(width, height, |x, y| {
+        image::Rgb([(x % 255) as u8, (y % 255) as u8, 96])
+    });
+    let mut encoded = Vec::new();
+    JpegEncoder::new_with_quality(&mut encoded, 88)
+        .write_image(
+            pixels.as_raw(),
+            width,
+            height,
+            image::ExtendedColorType::Rgb8,
+        )
+        .unwrap();
+    if !encoded.windows(5).any(|bytes| bytes == b"JFIF\0") {
+        let app0 = [
+            0xff, 0xe0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0, 1, 1, 0, 0, 1, 0, 1, 0, 0,
+        ];
+        encoded.splice(2..2, app0);
+    }
+    assert!(encoded.windows(5).any(|bytes| bytes == b"JFIF\0"));
+    fs::write(path, encoded).unwrap();
+}
+
 fn fixture(path: &Path, widths: &[i64], feature: Option<&str>) {
     let mut doc = Document::with_version("1.7");
     let root = doc.new_object_id();
@@ -345,11 +370,55 @@ fn capabilities_are_truthful_and_offline() {
     let dir = setup();
     let result = json(&run(dir.path(), &["capabilities", "--json"]), 0);
     assert_eq!(result["result"]["network_required"], false);
-    assert_eq!(result["result"]["operations"].as_array().unwrap().len(), 3);
+    assert_eq!(result["result"]["operations"].as_array().unwrap().len(), 4);
     assert!(result["result"]["not_implemented"]
         .as_array()
         .unwrap()
         .contains(&Value::String("server".into())));
+}
+
+#[test]
+fn jfif_images_create_an_ordered_valid_pdf() {
+    let dir = setup();
+    jfif(&dir.path().join("wide.jfif"), 160, 80);
+    jfif(&dir.path().join("tall.jfif"), 80, 160);
+    let result = json(
+        &run(
+            dir.path(),
+            &[
+                "image-to-pdf",
+                "wide.jfif",
+                "tall.jfif",
+                "--output",
+                "album.pdf",
+                "--json",
+            ],
+        ),
+        0,
+    );
+    assert_eq!(result["operation"], "image.to_pdf");
+    assert_eq!(result["stats"]["images"], 2);
+    assert_eq!(result["stats"]["pages"], 2);
+    let info = pdfjiff_core::inspect(&fs::read(dir.path().join("album.pdf")).unwrap()).unwrap();
+    assert_eq!(info.page_count, Some(2));
+    assert!(info.pages[0].width_pt > info.pages[0].height_pt);
+    assert!(info.pages[1].height_pt > info.pages[1].width_pt);
+}
+
+#[test]
+fn image_to_pdf_dry_run_validates_without_writing() {
+    let dir = setup();
+    jfif(&dir.path().join("photo.jfif"), 64, 48);
+    let result = json(
+        &run(
+            dir.path(),
+            &["image-to-pdf", "photo.jfif", "--dry-run", "--json"],
+        ),
+        0,
+    );
+    assert_eq!(result["status"], "planned");
+    assert_eq!(result["stats"]["pages"], 1);
+    assert!(!dir.path().join("photo.pdf").exists());
 }
 #[test]
 fn paths_with_spaces_and_unicode_work() {
@@ -421,6 +490,10 @@ fn completions_are_generated_for_common_shells() {
         assert!(
             script.contains("compress"),
             "{shell} script lacks subcommands"
+        );
+        assert!(
+            script.contains("image-to-pdf"),
+            "{shell} lacks image conversion"
         );
     }
     let output = run(dir.path(), &["completions", "tcsh"]);

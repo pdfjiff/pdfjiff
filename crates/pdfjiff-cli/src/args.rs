@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "pdfjiff",
     version,
-    about = "Local PDF inspection, compression and merging",
+    about = "Local PDF inspection, conversion, compression and merging",
     long_about = "Fast, private PDF tools that run entirely on your machine. Inputs are never modified, and outputs are never overwritten without --overwrite. Run `pdfjiff capabilities` to see what this build supports."
 )]
 pub struct Cli {
@@ -15,7 +15,7 @@ pub struct Cli {
     /// Maximum bytes per input, expressed as an integer number of MiB.
     #[arg(long, global = true, default_value_t = 128, value_parser = clap::value_parser!(u64).range(1..=4096))]
     pub max_input_mib: u64,
-    /// Maximum sum of input bytes for a merge, in MiB (not a peak-RAM guarantee).
+    /// Maximum sum of input bytes for a multi-file operation, in MiB (not a peak-RAM guarantee).
     #[arg(long, global = true, default_value_t = 256, value_parser = clap::value_parser!(u64).range(1..=8192))]
     pub max_total_input_mib: u64,
     #[command(subcommand)]
@@ -29,6 +29,8 @@ pub enum Command {
     Compress(Compress),
     /// Merge PDFs in the exact input order. Requires --output.
     Merge(Merge),
+    /// Turn JPG, JPEG, JFIF, PNG or WebP images into one ordered PDF.
+    ImageToPdf(ImageToPdf),
     /// Report actual capabilities and deliberate prerelease limitations.
     Capabilities,
     /// Print a shell completion script to stdout.
@@ -96,6 +98,59 @@ pub struct Merge {
     /// Permit reported loss of document-level forms, bookmarks, tags, etc.
     #[arg(long)]
     pub allow_structure_loss: bool,
+}
+
+#[derive(Args)]
+pub struct ImageToPdf {
+    /// Image paths in page order. Content is detected from bytes, not extension.
+    #[arg(required = true, num_args = 1..)]
+    pub inputs: Vec<PathBuf>,
+    /// Output path. Defaults to the first image name with a .pdf extension.
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+    /// Atomically replace an existing distinct output. Never permits input overwrite.
+    #[arg(long)]
+    pub overwrite: bool,
+    /// Validate every image and report the proposed output without writing it.
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Page size. `fit` sizes every page to its image at the selected DPI.
+    #[arg(long, value_enum, default_value_t = ImagePageSize::Fit)]
+    pub page_size: ImagePageSize,
+    /// Page orientation for A4 and Letter pages.
+    #[arg(long, value_enum, default_value_t = ImageOrientation::Auto)]
+    pub orientation: ImageOrientation,
+    /// Margin in millimetres for A4 and Letter pages.
+    #[arg(long, default_value_t = 0.0, value_parser = parse_margin)]
+    pub margin_mm: f32,
+    /// Image DPI used to calculate physical page size.
+    #[arg(long, default_value_t = 96, value_parser = clap::value_parser!(u32).range(18..=1200))]
+    pub dpi: u32,
+    /// Re-encode quality from 1 to 100; 0 embeds original JPEG/JFIF bytes.
+    #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=100))]
+    pub quality: u8,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ImagePageSize {
+    Fit,
+    A4,
+    Letter,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ImageOrientation {
+    Auto,
+    Portrait,
+    Landscape,
+}
+
+fn parse_margin(value: &str) -> std::result::Result<f32, String> {
+    value
+        .parse::<f32>()
+        .ok()
+        .filter(|margin| margin.is_finite() && (0.0..=100.0).contains(margin))
+        .ok_or_else(|| "Margin must be a number from 0 to 100 millimetres.".into())
 }
 pub fn parse_size(value: &str) -> std::result::Result<u64, String> {
     let value = value.trim();

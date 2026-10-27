@@ -266,9 +266,9 @@ fn detect_format(data: &[u8]) -> Option<ImageFormat> {
 }
 
 fn prepare_image(data: &[u8], recompress_quality: u8) -> Result<PreparedImage, String> {
-    match detect_format(data)
-        .ok_or_else(|| "Unsupported file. Supported inputs: JPG, PNG, WebP.".to_string())?
-    {
+    match detect_format(data).ok_or_else(|| {
+        "Unsupported file. Supported inputs: JPG, JPEG, JFIF, PNG, WebP.".to_string()
+    })? {
         ImageFormat::Jpeg => prepare_jpeg(data, recompress_quality),
         fmt => prepare_decoded(data, fmt, recompress_quality),
     }
@@ -532,6 +532,29 @@ fn scan_jpeg_markers<T>(data: &[u8], f: impl Fn(u8, &[u8]) -> Option<T>) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::{ImageEncoder, RgbImage};
+
+    fn jfif(width: u32, height: u32) -> Vec<u8> {
+        let image = RgbImage::from_pixel(width, height, image::Rgb([32, 96, 160]));
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 88)
+            .write_image(
+                image.as_raw(),
+                width,
+                height,
+                image::ExtendedColorType::Rgb8,
+            )
+            .expect("encode JPEG");
+        if !jpeg.windows(5).any(|bytes| bytes == b"JFIF\0") {
+            jpeg.splice(
+                2..2,
+                [
+                    0xff, 0xe0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0, 1, 1, 0, 0, 1, 0, 1, 0, 0,
+                ],
+            );
+        }
+        jpeg
+    }
 
     #[test]
     fn parses_minimal_jpeg_sof() {
@@ -549,5 +572,18 @@ mod tests {
     #[test]
     fn rejects_unknown_magic() {
         assert!(detect_format(b"GIF89a....").is_none());
+    }
+
+    #[test]
+    fn creates_a_valid_pdf_from_jfif() {
+        let mut builder =
+            PdfBuilder::try_new(PageSize::FitToImage, Orientation::Auto, 0.0, 96.0, 0)
+                .expect("builder");
+        builder.try_add_image(&jfif(48, 32)).expect("JFIF image");
+        let pdf = builder.try_finish().expect("PDF");
+        let inspection = crate::inspect(&pdf).expect("valid PDF");
+        assert_eq!(inspection.page_count, Some(1));
+        assert_eq!(inspection.pages[0].width_pt, 36.0);
+        assert_eq!(inspection.pages[0].height_pt, 24.0);
     }
 }
