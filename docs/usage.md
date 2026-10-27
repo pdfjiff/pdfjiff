@@ -3,7 +3,7 @@
 This page documents `pdfjiff` 0.1. The binary itself is always the authority: run `pdfjiff --help`, `pdfjiff <command> --help` and `pdfjiff capabilities --json`.
 
 - [Global options](#global-options)
-- [inspect](#inspect) · [compress](#compress) · [merge](#merge) · [capabilities](#capabilities) · [completions](#completions)
+- [inspect](#inspect) · [compress](#compress) · [merge](#merge) · [image-to-pdf](#image-to-pdf) · [capabilities](#capabilities) · [completions](#completions)
 - [Safety model](#safety-model)
 - [JSON output](#json-output)
 - [Exit codes](#exit-codes) · [Error codes](#error-codes)
@@ -16,7 +16,7 @@ These options work with every command:
 | --- | --- | --- |
 | `--json` | off | Print exactly one JSON result on stdout. Warnings go into the result instead of stderr. |
 | `--max-input-mib N` | 128 | Refuse any single input larger than N MiB (1–4096). |
-| `--max-total-input-mib N` | 256 | Refuse a merge whose inputs total more than N MiB (1–8192). |
+| `--max-total-input-mib N` | 256 | Refuse a multi-file operation whose inputs total more than N MiB (1–8192). |
 | `-h`, `--help` | | Show help. |
 | `-V`, `--version` | | Print the version. |
 
@@ -82,6 +82,21 @@ Merges pages in exactly the order you list the files. `-o/--output` is required.
 - If an input has structures that page assembly cannot keep (for example bookmarks, forms, links or XMP metadata; `inspect` lists them), `merge` stops with `UNSUPPORTED_PRESERVATION`. Many PDFs exported from office software include at least one of these. Add `--allow-structure-loss` to proceed; each dropped structure is listed in `warnings`.
 - The total input size is limited by `--max-total-input-mib`.
 
+## image-to-pdf
+
+```bash
+pdfjiff image-to-pdf IMAGE [IMAGE ...] [-o OUTPUT] [--page-size fit|a4|letter]
+                         [--orientation auto|portrait|landscape] [--margin-mm N]
+                         [--dpi N] [--quality 0..100] [--overwrite] [--dry-run] [--json]
+```
+
+Creates one PDF page per image, in argument order. JPG, JPEG, JFIF, PNG and WebP are detected from their bytes, so a misleading extension cannot bypass validation. The output defaults to the first image name with a `.pdf` extension.
+
+- `fit` (default) sizes each page from that image's pixels and `--dpi` (default 96).
+- `a4` and `letter` place each image inside the selected page with `--orientation` and `--margin-mm` (0–100).
+- `--quality 0` keeps original JPEG/JFIF bytes when possible. Values 1–100 re-encode images at that JPEG quality.
+- The result is parsed again and its page count is checked before atomic publication.
+
 ## capabilities
 
 ```bash
@@ -123,7 +138,7 @@ With `--json`, stdout contains exactly one JSON object and a trailing newline. T
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `schema_version` | integer | `1`. Only incremented for breaking changes. |
-| `operation` | string | `document.inspect`, `pdf.compress`, `pdf.merge`, `capabilities` or `cli` (argument errors) |
+| `operation` | string | `document.inspect`, `pdf.compress`, `pdf.merge`, `image.to_pdf`, `capabilities` or `cli` (argument errors) |
 | `status` | string | `succeeded`, `planned` (dry run) or `failed` |
 | `result` | object or null | Operation-specific result (see each command) |
 | `stats` | object | Measurements such as `input_bytes`, `output_bytes`, `pages`, `attempts` and `elapsed_ms`. `elapsed_ms` is informational, not a benchmark. |
@@ -163,6 +178,7 @@ Match on `error.code`, never on `message`.
 | `INPUT_UNAVAILABLE` | 3 | The input cannot be opened or read | Check the path and permissions |
 | `INVALID_INPUT` | 3 | The input is not a regular file | Pass a file, not a directory |
 | `INVALID_PDF` | 3 | The input is not a readable PDF | Check the file is a valid PDF |
+| `INVALID_IMAGE` | 3 | An image is invalid or unsupported | Choose a JPG, JPEG, JFIF, PNG or WebP image |
 | `SIGNED_PDF` | 3 | The input is signed | Add `--allow-signature-invalidation` if that is intended |
 | `UNSUPPORTED_PRESERVATION` | 3 | `merge` would drop document structures | Add `--allow-structure-loss` after reviewing, or use another tool |
 | `PASSWORD_REQUIRED` | 4 | The PDF is encrypted | Decrypt a copy first |

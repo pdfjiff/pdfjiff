@@ -3,7 +3,7 @@
 <h1><img src="docs/assets/logo.png" alt="PDFJiff" width="412"></h1>
 
 **Fast, private PDF tools for your terminal.**<br>
-Compress, merge and inspect PDFs locally. No uploads, no accounts, no server. One small binary.
+Compress, merge, inspect and turn images into PDFs locally. No uploads, no accounts, no server. One small binary.
 
 [![CI](https://github.com/pdfjiff/pdfjiff/actions/workflows/ci.yml/badge.svg)](https://github.com/pdfjiff/pdfjiff/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/pdfjiff/pdfjiff?sort=semver&display_name=tag)](https://github.com/pdfjiff/pdfjiff/releases/latest)
@@ -46,6 +46,7 @@ pdfjiff compress report.pdf                               # writes report-compre
 pdfjiff compress report.pdf --target 2MB -o upload.pdf    # fit an upload limit
 pdfjiff compress report.pdf --lossless -o optimized.pdf   # keep every image pixel
 pdfjiff merge cover.pdf report.pdf -o combined.pdf        # merge in argument order
+pdfjiff image-to-pdf cover.jfif photo.png -o album.pdf      # one ordered PDF
 ```
 
 Use `pdfjiff --help` or `pdfjiff <command> --help` for every option.
@@ -57,6 +58,7 @@ Use `pdfjiff --help` or `pdfjiff <command> --help` for every option.
 | `inspect <PDF>` | Reports page count, page sizes and rotation, encryption, signatures and document structures. |
 | `compress <PDF>` | Recompresses images with the `quality`, `balanced` (default) or `small` preset. Use `--lossless` to optimize structure only, or `--target 2MB` to try up to six increasingly compact settings until the file fits. |
 | `merge <PDF> <PDF>...` | Merges files in the order given. Requires `-o/--output`. |
+| `image-to-pdf <IMAGE>...` | Creates an ordered PDF from JPG, JPEG, JFIF, PNG or WebP images. |
 | `capabilities` | Lists what this build supports and its limitations. This is the authority for scripts. |
 | `completions <SHELL>` | Prints tab-completion scripts for bash, zsh, fish, PowerShell and elvish. |
 
@@ -139,7 +141,7 @@ The library API is pre-1.0 and may change between minor versions. The [crate doc
 
 PDFJiff is an early release (0.x). The commands listed above work and are tested on every change. Their JSON contract is versioned (`schema_version: 1`). Work in progress:
 
-- More operations: split, rotate, reorder, images to PDF and PDF to images
+- More operations: split, rotate, reorder and PDF to images
 - Batch processing and multi-step pipelines
 - Opening password-protected files
 - A local web UI (planned last)

@@ -1,6 +1,6 @@
 # pdfjiff-cli
 
-The `pdfjiff` command-line tool: fast, private PDF compression, merging and inspection that runs entirely on your machine.
+The `pdfjiff` command-line tool: fast, private PDF compression, merging, inspection and image-to-PDF conversion that runs entirely on your machine.
 
 ```bash
 cargo binstall pdfjiff-cli        # prebuilt binary
@@ -11,6 +11,7 @@ cargo install pdfjiff-cli --locked  # or build from source
 pdfjiff inspect report.pdf
 pdfjiff compress report.pdf --target 2MB -o upload.pdf
 pdfjiff merge cover.pdf report.pdf -o combined.pdf
+pdfjiff image-to-pdf cover.jfif photo.png -o album.pdf
 pdfjiff capabilities --json
 ```
 

@@ -6,6 +6,10 @@ The release workflow publishes the section that matches the tag as the GitHub re
 
 ## [Unreleased]
 
+### Added
+
+- `pdfjiff image-to-pdf`: ordered JPG, JPEG, JFIF, PNG, and WebP conversion with fit, A4, and Letter page layouts.
+
 ## [0.1.0] - 2026-10-10
 
 First public release.
